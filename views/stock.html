@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Document</title>
+	<link rel="stylesheet" href="../src/css/base.css">
+	<style>
+		body{
+			font-family:Helvetica;
+			min-width:600px;
+		}
+		.wrapper{
+			display:flex;
+			flex-direction:column;
+			height:100vh;
+		}
+		.header{
+			height:30px;
+			padding:10px;
+			display:flex;
+			background:#FF003E;
+			color:#fff;
+			font-size:16px;
+		}
+		.header span,.header label{
+			line-height:30px;
+		}
+		#stockNum{
+			padding:0 5px;
+			font-size:16px;
+			border:none;
+			flex:1;
+		}
+		#addStock{
+			width:80px;
+			text-align:center;
+			background:#295DFF;
+			color:#fff;
+			border:none;
+			font-size:16px;
+			cursor:pointer;
+		}
+		.content{
+			flex:1;
+		}
+		.content span{
+			text-align:center;
+			flex-grow:1;
+			flex-basis:9%;
+		}
+		.list-title{
+			padding:0 10px;
+			height:40px;
+			line-height:40px;
+			display:flex;
+		}
+		.list-title span{cursor:pointer;}
+		.content dd{
+			padding:0 10px;
+			height:40px;
+			line-height:40px;
+			display:flex;
+		}
+		.content dd.up span:nth-child(4),.content dd.up span:nth-child(5),.content dd.up span:nth-child(6){
+			color:red;
+		}
+		.content dd.down span:nth-child(4),.content dd.down span:nth-child(5),.content dd.down span:nth-child(6){
+			color:green;
+		}
+		.content dd:nth-child(even){
+			background:#f0f0f0;
+		}
+		.delete,.refresh{
+			padding:10px;
+			background:#FF003E;
+			color:#fff;
+		}
+		.refresh{background:#295DFF;}
+		.delete:hover,.refresh:hover{text-decoration:none}
+	</style>
+	<script src="../vender/js/jquery.js"></script>
+	<script src="../vender/js/underscore.js"></script>
+	<script src="../vender/js/backbone.js"></script>
+	<script src="../vender/js/backbone.localstorage.js"></script>
+</head>
+<body>
+<div class="wrapper">
+<div class="header">
+	<span class="mr10">请输入股票代码</span>
+	<input type="text" id="stockNum">
+	<input type="button" value="提交" id="addStock">
+	<label class="ml10"><input type="checkbox" id="autoRefresh">自动刷新</label>
+	<span class="ml10" id="content"></span>
+</div>
+<dl class="content" id="list">
+	<dt class="list-title" id="listTitle">
+		<span data-sort="id">股票代码</span>
+		<span>股票名称</span>
+		<span data-sort="last">昨收</span>
+		<span data-sort="curr">当前</span>
+		<span data-sort="change">涨跌</span>
+		<span data-sort="percent">涨幅</span>
+		<span data-sort="hand">成交量</span>
+		<span data-sort="account">成交额</span>
+		<span>最高</span>
+		<span>最低</span>
+		<span>操作</span>
+	</dt>
+</dl>
+</div>
+<script id="T-list" type="text/html">
+		<span><%= stock.id %></span>
+		<span><%= stock.name %></span>
+		<span><%= stock.last %></span>
+		<span><%= stock.curr %></span>
+		<span><%= stock.change %></span>
+		<span><%= stock.percent %>%</span>
+		<span><%= stock.hand %>手</span>
+		<span><%= stock.account %>万</span>
+		<span><%= stock.high %></span>
+		<span><%= stock.low %></span>
+		<span>
+			<a href="javascript:;" class="delete">删除</a>
+			<a href="javascript:;" class="refresh">刷新</a>
+		</span>
+</script>
+<script>
+function loadJs(url,id,callback){
+	if(typeof id != "string"){
+		callback = id;
+		id = "";
+	}
+
+	callback = callback || function(){};
+
+	var ga = document.createElement("script");
+
+	ga.type = "text/JavaScript";
+	ga.async = true;
+　ga.src = url;
+  ga.id = id;
+
+	ga.onload = ga.onreadystatechange = function(){
+		if(!ga.readyState||ga.readyState == "loaded"||ga.readyState == "complete"){
+			callback();
+		}
+	}
+　	var s = document.getElementsByTagName("script")[0];
+	s.parentNode.insertBefore(ga,s);
+}
+
+</script>
+<script>
+var Stock = Backbone.Model.extend({
+	defaults: function(){
+		return {
+			stockNum: '',
+			stock: {}
+		}
+	},
+	finished: true,
+	getStockMarket: function(){
+		if(!this.finished) return;
+
+		this.finished = false;
+
+		var that = this,
+		    id = this.get('stockNum');
+
+		loadJs('http://hq.sinajs.cn/list=' + id, id, function(){
+			var data = eval('hq_str_' + id).split(',');
+
+			$('#' + id).remove();
+
+			if(!data[0]){
+				that.destroy();
+				return;
+			}
+
+			var last = parseFloat(data[2]).toFixed(2),
+					curr = parseFloat(data[3]).toFixed(2);
+
+			var stock = {
+				id: id.substring(2),
+				name: data[0],
+				last: last,
+				curr: curr,
+				change: (curr - last).toFixed(2),
+				percent: ((curr - last) / last * 100).toFixed(2),
+				high: parseFloat(data[4]).toFixed(2),
+				low: parseFloat(data[5]).toFixed(2),
+				hand: (data[8] / 100).toFixed(2),
+				account: (data[9] / 10000).toFixed(2),
+				state: curr < last ? 'down' : (curr > last ? 'up' : 'draw')
+			}
+			that.set({stock: stock});
+			that.finished = true;
+		});
+	}
+});
+
+var StockLists = Backbone.Collection.extend({
+	model: Stock,
+	localStorage: new Backbone.LocalStorage('stock'),
+	sortByType: function(type, dir){
+		var toggle = dir || this.toggleDir;
+		this.comparator = function(model){
+			return parseFloat(model.get('stock')[type]) * toggle;
+		}
+		this.sort();
+	},
+	toggleDir: 1,
+	comparator: 'stockNum'
+});
+
+var stockLists = new StockLists();
+
+var StockView = Backbone.View.extend({
+	tagName: 'dd',
+	template: _.template($('#T-list').html()),
+	events: {
+		'click .delete': 'clear',
+		'click .refresh': 'refresh'
+	},
+	initialize: function(){
+		//this.listenTo(this.model, 'sync', this.render);
+		this.listenTo(this.model, 'change', this.render);
+		this.listenTo(this.model, 'destroy', this.remove);
+	},
+	render: function(){
+		this.$el.html(this.template(this.model.toJSON()))
+				.removeClass()
+		    .addClass(this.model.get('stock').state);
+
+		return this;
+	},
+	clear: function(){
+		this.model.destroy();
+	},
+	refresh: function(){
+		this.model.getStockMarket();
+	}
+});
+
+var App = Backbone.View.extend({
+	el: 'body',
+	events: {
+		'click #addStock': 'addStock',
+		'keypress #stockNum': 'addByEnter',
+		'click #autoRefresh': 'autoRefresh',
+		'click #listTitle>span': 'needResort'
+	},
+	initialize: function(){
+		this.collection = stockLists;
+		this.$list = this.$('#list');
+		this.$content = this.$('#content');
+		this.$stockNum = this.$('#stockNum');
+		this.autoRefresh = false;
+		this.refreshFn;
+		this.sortType = 'id';
+
+		this.listenTo(this.collection, 'add', this.addStockView);
+		this.listenTo(this.collection, 'all', this.render);
+		this.listenTo(this.collection, 'sort', this.resort);
+
+		this.collection.fetch();
+	},
+	render: function(){
+		var length = this.collection.length;
+
+		this.$content.html('当前有' + length + '只自选股');
+	},
+	addStock: function(){
+		var stockNum = this.$stockNum.val();
+
+		stockNum = stockNum.charAt(0) == '6' ? ('sh' + stockNum) : ('sz' + stockNum);
+		if(!this.collection.find({stockNum: stockNum})){
+			this.collection.add({stockNum: stockNum});
+		}
+		this.$stockNum.val('');
+	},
+	addByEnter: function(e){
+		if(e.keyCode != 13) return;
+		if(!this.$stockNum.val()) return;
+
+		this.addStock();
+	},
+	addStockView: function(model){
+		model.save();
+		model.getStockMarket();
+	},
+	autoRefresh: function(){
+		var that = this;
+		if(!this.autoRefresh){
+			console.log('auto start');
+			this.refreshFn = setInterval(function(){
+				that.collection.each(function(model){
+					model.getStockMarket();
+				});
+			}, 2000);
+			this.autoRefresh = true;
+		}else{
+			console.log('auto end');
+			clearInterval(this.refreshFn);
+			this.autoRefresh = false;
+		}
+
+	},
+	needResort: function(e){
+		if(e && e.target){
+			this.sortType = e.target.getAttribute('data-sort');
+
+			if(!this.sortType) return;
+
+			var dir = this.collection.toggleDir = parseInt(e.target.getAttribute('data-dir')) || -1;
+			e.target.setAttribute('data-dir', -dir);
+		}
+
+		this.collection.sortByType(this.sortType, dir);
+	},
+	resort: function(){
+		var that = this;
+
+		this.$('dd').remove();
+		this.collection.each(function(model){
+			var view = new StockView({model: model});
+			that.$list.append(view.render().el);
+		});
+	}
+});
+
+var app = new App();
+
+
+</script>
+</body>
+</html>
