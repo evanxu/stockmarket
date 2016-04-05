@@ -89,8 +89,6 @@
 	<span class="mr10">请输入股票代码</span>
 	<input type="text" id="stockNum">
 	<input type="button" value="提交" id="addStock">
-	<label class="ml10"><input type="checkbox" id="autoRefresh">自动刷新</label>
-	<span class="ml10" id="content"></span>
 </div>
 <dl class="content" id="list">
 	<dt class="list-title" id="listTitle">
@@ -155,14 +153,15 @@ var Stock = Backbone.Model.extend({
 	defaults: function(){
 		return {
 			stockNum: '',
-			stock: {}
+			stock: {},
+			autoRefresh: false
 		}
 	},
-	finished: true,
+	actived: true,
 	getStockMarket: function(){
-		if(!this.finished) return;
+		if(!this.actived) return;
 
-		this.finished = false;
+		this.actived = false;
 
 		var that = this,
 		    id = this.get('stockNum');
@@ -194,7 +193,14 @@ var Stock = Backbone.Model.extend({
 				state: curr < last ? 'down' : (curr > last ? 'up' : 'draw')
 			}
 			that.set({stock: stock});
-			that.finished = true;
+
+			that.actived = true;
+			stockLists.sort();
+
+			setTimeout(function(){
+				that.getStockMarket()
+			}, 5000);
+
 		});
 	}
 });
@@ -223,9 +229,8 @@ var StockView = Backbone.View.extend({
 		'click .refresh': 'refresh'
 	},
 	initialize: function(){
-		//this.listenTo(this.model, 'sync', this.render);
-		this.listenTo(this.model, 'change', this.render);
-		this.listenTo(this.model, 'destroy', this.remove);
+		//this.listenTo(this.model, 'change:stock', this.render);
+		this.listenTo(this.model, 'destroy', this.destroy);
 	},
 	render: function(){
 		this.$el.html(this.template(this.model.toJSON()))
@@ -239,6 +244,10 @@ var StockView = Backbone.View.extend({
 	},
 	refresh: function(){
 		this.model.getStockMarket();
+	},
+	destroy: function(){
+		this.remove();
+		this.model.actived = false;
 	}
 });
 
@@ -247,7 +256,6 @@ var App = Backbone.View.extend({
 	events: {
 		'click #addStock': 'addStock',
 		'keypress #stockNum': 'addByEnter',
-		'click #autoRefresh': 'autoRefresh',
 		'click #listTitle>span': 'needResort'
 	},
 	initialize: function(){
@@ -255,21 +263,15 @@ var App = Backbone.View.extend({
 		this.$list = this.$('#list');
 		this.$content = this.$('#content');
 		this.$stockNum = this.$('#stockNum');
-		this.autoRefresh = false;
-		this.refreshFn;
 		this.sortType = 'id';
 
 		this.listenTo(this.collection, 'add', this.addStockView);
-		this.listenTo(this.collection, 'all', this.render);
 		this.listenTo(this.collection, 'sort', this.resort);
 
 		this.collection.fetch();
-	},
-	render: function(){
-		var length = this.collection.length;
 
-		this.$content.html('当前有' + length + '只自选股');
 	},
+	render: function(){},
 	addStock: function(){
 		var stockNum = this.$stockNum.val();
 
@@ -288,23 +290,6 @@ var App = Backbone.View.extend({
 	addStockView: function(model){
 		model.save();
 		model.getStockMarket();
-	},
-	autoRefresh: function(){
-		var that = this;
-		if(!this.autoRefresh){
-			console.log('auto start');
-			this.refreshFn = setInterval(function(){
-				that.collection.each(function(model){
-					model.getStockMarket();
-				});
-			}, 2000);
-			this.autoRefresh = true;
-		}else{
-			console.log('auto end');
-			clearInterval(this.refreshFn);
-			this.autoRefresh = false;
-		}
-
 	},
 	needResort: function(e){
 		if(e && e.target){
