@@ -176,8 +176,8 @@ var Stock = Backbone.Model.extend({
 				return;
 			}
 
-			var last = parseFloat(data[2]).toFixed(2),
-					curr = parseFloat(data[3]).toFixed(2);
+			var last = parseFloat(data[2]),
+					curr = parseFloat(data[3]);
 
 			var stock = {
 				id: id.substring(2),
